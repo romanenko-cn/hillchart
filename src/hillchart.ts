@@ -36,7 +36,7 @@ export const chartBounds = {
   center: 688,
 };
 
-export const maxItems = 8;
+export const maxItems = 15;
 export const defaultChartTitle = "Project Hillchart";
 
 export function clampPercentage(value: number): number {
@@ -48,12 +48,12 @@ export function clampPercentage(value: number): number {
 }
 
 export function createEmptyItems(): HillchartItem[] {
-  return [createTaskItem(1)];
+  return [createMilestoneItem(1)];
 }
 
-export function createTaskItem(index: number): HillchartItem {
+export function createMilestoneItem(index: number): HillchartItem {
   return {
-    id: createTaskId(),
+    id: createMilestoneId(),
     name: "",
     percentage: defaultPercentageForIndex(index),
   };
@@ -224,12 +224,15 @@ export function sanitizeItems(value: unknown): HillchartItem[] {
 
 function sanitizeItem(value: unknown, index: number): HillchartItem {
   if (!value || typeof value !== "object") {
-    return createTaskItem(index);
+    return createMilestoneItem(index);
   }
 
   const candidate = value as Partial<HillchartItem>;
   return {
-    id: typeof candidate.id === "string" && candidate.id.length > 0 ? candidate.id : createTaskId(),
+    id:
+      typeof candidate.id === "string" && candidate.id.length > 0
+        ? candidate.id
+        : createMilestoneId(),
     name: typeof candidate.name === "string" ? candidate.name : "",
     percentage: clampPercentage(Number(candidate.percentage)),
   };
@@ -239,10 +242,10 @@ function defaultPercentageForIndex(index: number): number {
   return index === 1 ? 20 : Math.min(100, 20 + (index - 1) * 8);
 }
 
-function createTaskId(): string {
+function createMilestoneId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
 
-  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
