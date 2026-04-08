@@ -4,7 +4,7 @@ import {
   chartBounds,
   clampPercentage,
   createEmptyItems,
-  createTaskItem,
+  createMilestoneItem,
   defaultChartTitle,
   getHillPoint,
   maxItems,
@@ -48,10 +48,10 @@ describe("getHillPoint", () => {
 describe("buildLabelLayouts", () => {
   it("separates labels for clustered percentages", () => {
     const layouts = buildLabelLayouts([
-      { id: "a", name: "Task A", percentage: 20 },
-      { id: "b", name: "Task B", percentage: 21 },
-      { id: "c", name: "Task C", percentage: 22 },
-      { id: "d", name: "Task D", percentage: 23 },
+      { id: "a", name: "Milestone A", percentage: 20 },
+      { id: "b", name: "Milestone B", percentage: 21 },
+      { id: "c", name: "Milestone C", percentage: 22 },
+      { id: "d", name: "Milestone D", percentage: 23 },
     ]);
 
     layouts.forEach((layout, index) => {
@@ -75,7 +75,7 @@ function overlaps(
 }
 
 describe("sanitizeItems", () => {
-  it("normalizes stored items without padding to eight rows", () => {
+  it("normalizes stored items without padding to ten rows", () => {
     const items = sanitizeItems([
       { id: "existing", name: "Lookup API", percentage: 101 },
       { name: 12, percentage: -4 },
@@ -87,11 +87,13 @@ describe("sanitizeItems", () => {
     expect(items[1].percentage).toBe(0);
   });
 
-  it("keeps at least one task and no more than eight tasks", () => {
+  it("keeps at least one milestone and no more than ten milestones", () => {
     expect(createEmptyItems()).toHaveLength(1);
     expect(sanitizeItems([])).toHaveLength(1);
     expect(
-      sanitizeItems(Array.from({ length: maxItems + 2 }, (_, index) => createTaskItem(index + 1))),
+      sanitizeItems(
+        Array.from({ length: maxItems + 2 }, (_, index) => createMilestoneItem(index + 1)),
+      ),
     ).toHaveLength(maxItems);
   });
 });

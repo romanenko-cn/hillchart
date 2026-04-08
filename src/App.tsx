@@ -5,7 +5,7 @@ import {
   chartBounds,
   clampPercentage,
   createEmptyItems,
-  createTaskItem,
+  createMilestoneItem,
   defaultChartTitle,
   maxItems,
   type HillchartItem,
@@ -17,6 +17,15 @@ import "./App.css";
 
 const itemsStorageKey = "hillchart.items.v1";
 const titleStorageKey = "hillchart.title.v1";
+const placementGuidelines = [
+  "0-35: still figuring out the problem or approach",
+  "36-49: approaching clarity, but important unknowns remain",
+  "50: crest; path is clear",
+  "51-69: implementation path is known, but meaningful execution remains",
+  "70-84: implementation is largely in place and the scope is in review / QA / stabilization",
+  "85-94: QA has meaningfully exercised it and remaining work is mostly bug fixes / hardening",
+  "95-100: effectively done, accepted, or only trivial wrap-up remains",
+];
 
 function loadItems(): HillchartItem[] {
   if (typeof window === "undefined") {
@@ -41,16 +50,16 @@ function loadTitle(): string {
 
 function markerColor(percentage: number): string {
   if (percentage < 34) {
-    return "#5f6d99";
+    return "#6371a6";
   }
   if (percentage < 50) {
-    return "#4f83a7";
+    return "#5387b7";
   }
   if (percentage < 60) {
-    return "#dda72e";
+    return "#c89b2f";
   }
 
-  return "#2f9c96";
+  return "#35a4a2";
 }
 
 function App() {
@@ -82,7 +91,7 @@ function App() {
         return current;
       }
 
-      return [...current, createTaskItem(current.length + 1)];
+      return [...current, createMilestoneItem(current.length + 1)];
     });
   }
 
@@ -136,8 +145,8 @@ function App() {
           <p className="eyebrow">Hillchart Builder</p>
           <h1>Create and update project hillcharts</h1>
           <p className="intro">
-            Enter up to eight tasks, then use percentages to position them from unknowns on
-            the left through execution on the right.
+            Enter up to ten milestones, then use percentages to position them from unknowns
+            on the left through execution on the right.
           </p>
         </div>
         <div className="hero-actions">
@@ -153,7 +162,7 @@ function App() {
       {exportStatus ? <p className="export-status">{exportStatus}</p> : null}
 
       <section className="workspace" aria-label="Hillchart editor">
-        <form className="editor" aria-label="Task inputs">
+        <form className="editor" aria-label="Milestone inputs">
           <label className="title-editor">
             <span>Chart title</span>
             <input
@@ -167,8 +176,8 @@ function App() {
           </label>
 
           <div className="editor-heading">
-            <h2>Tasks</h2>
-            <span>{items.length} / {maxItems} tasks</span>
+            <h2>Milestones</h2>
+            <span>{items.length} / {maxItems} milestones</span>
           </div>
 
           {items.map((item, index) => (
@@ -180,7 +189,7 @@ function App() {
                   type="text"
                   value={item.name}
                   maxLength={72}
-                  placeholder="Task name"
+                  placeholder="Milestone name"
                   onChange={(event) => updateItem(item.id, { name: event.target.value })}
                 />
               </label>
@@ -188,7 +197,7 @@ function App() {
                 <span>Percentage</span>
                 <input
                   className="number-input"
-                  aria-label={`Percentage for task ${index + 1}`}
+                  aria-label={`Percentage for milestone ${index + 1}`}
                   type="number"
                   min="0"
                   max="100"
@@ -205,7 +214,7 @@ function App() {
                 type="button"
                 onClick={() => removeItem(item.id)}
                 disabled={items.length <= 1}
-                aria-label={`Remove task ${index + 1}`}
+                aria-label={`Remove milestone ${index + 1}`}
               >
                 ×
               </button>
@@ -218,8 +227,18 @@ function App() {
             onClick={addItem}
             disabled={items.length >= maxItems}
           >
-            Add task
+            Add milestone
           </button>
+
+          <section className="helper-card" aria-label="Placement guide">
+            <p className="helper-title">Placement guide</p>
+            <p className="helper-intro">Use these rough percentage ranges when placing milestones on the hill.</p>
+            <ul className="helper-list">
+              {placementGuidelines.map((guideline) => (
+                <li key={guideline}>{guideline}</li>
+              ))}
+            </ul>
+          </section>
         </form>
 
         <section className="chart-card" aria-label="Hillchart preview">
@@ -257,50 +276,67 @@ function HillChart({
       aria-labelledby="chart-title chart-desc"
     >
       <title id="chart-title">Project hillchart</title>
-      <desc id="chart-desc">Task names are positioned along a hill curve based on percentage complete.</desc>
+      <desc id="chart-desc">Milestone names are positioned along a hill curve based on percentage complete.</desc>
 
       <defs>
         <linearGradient id="hill-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#667196" />
-          <stop offset="48%" stopColor="#c49a3d" />
-          <stop offset="58%" stopColor="#d9a332" />
-          <stop offset="100%" stopColor="#2f9c96" />
+          <stop offset="0%" stopColor="#66739f" />
+          <stop offset="28%" stopColor="#8c92af" />
+          <stop offset="49%" stopColor="#c8992d" />
+          <stop offset="60%" stopColor="#b8a24a" />
+          <stop offset="100%" stopColor="#34a4a3" />
         </linearGradient>
         <linearGradient id="wash" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#fff6e4" />
-          <stop offset="48%" stopColor="#fffdf9" />
-          <stop offset="100%" stopColor="#e9fbff" />
+          <stop offset="0%" stopColor="#fbf1d9" />
+          <stop offset="44%" stopColor="#fbfaf7" />
+          <stop offset="100%" stopColor="#e2f3f7" />
         </linearGradient>
+        <radialGradient id="left-glow" cx="0%" cy="20%" r="70%">
+          <stop offset="0%" stopColor="rgba(247, 221, 167, 0.6)" />
+          <stop offset="100%" stopColor="rgba(247, 221, 167, 0)" />
+        </radialGradient>
+        <radialGradient id="right-glow" cx="100%" cy="100%" r="78%">
+          <stop offset="0%" stopColor="rgba(177, 230, 236, 0.6)" />
+          <stop offset="100%" stopColor="rgba(177, 230, 236, 0)" />
+        </radialGradient>
+        <filter id="soft-shadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#3f5573" floodOpacity="0.12" />
+        </filter>
+        <filter id="curve-shadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#53627f" floodOpacity="0.18" />
+        </filter>
       </defs>
 
       <rect width="1376" height="768" rx="0" fill="url(#wash)" />
-      <line x1="40" y1="80" x2="1336" y2="80" stroke="#d7dde6" strokeWidth="1.5" />
+      <rect width="1376" height="768" rx="0" fill="url(#left-glow)" opacity="0.75" />
+      <rect width="1376" height="768" rx="0" fill="url(#right-glow)" opacity="0.75" />
+      <line x1="76" y1="104" x2="1300" y2="104" stroke="#d7dde6" strokeWidth="1.5" />
       <line
         x1={chartBounds.center}
-        y1="166"
+        y1="182"
         x2={chartBounds.center}
         y2="690"
-        stroke="#d1d7df"
-        strokeWidth="1.2"
+        stroke="#dde4ea"
+        strokeWidth="1.4"
       />
       <line
         x1="40"
         y1={chartBounds.baseline + 8}
         x2="1336"
         y2={chartBounds.baseline + 8}
-        stroke="#d7dde6"
+        stroke="#dbe3ea"
         strokeWidth="1.5"
       />
 
       <text
         x="688"
-        y="55"
+        y="82"
         textAnchor="middle"
-        fill="#1f2a3d"
+        fill="#24334b"
         fontFamily="Inter, Arial, sans-serif"
-        fontSize="30"
+        fontSize="31"
         fontWeight="500"
-        letterSpacing="-0.02em"
+        letterSpacing="-0.03em"
       >
         {title}
       </text>
@@ -308,11 +344,12 @@ function HillChart({
       <path
         d={hillPath}
         fill="none"
-        stroke="rgba(39, 47, 66, 0.16)"
+        stroke="rgba(73, 84, 109, 0.12)"
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth="10"
         transform="translate(0 2)"
+        filter="url(#curve-shadow)"
       />
       <path
         d={hillPath}
@@ -320,7 +357,7 @@ function HillChart({
         stroke="url(#hill-gradient)"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="6"
+        strokeWidth="5.5"
       />
 
       {items.length === 0 ? (
@@ -333,7 +370,7 @@ function HillChart({
           fontSize="22"
           fontWeight="700"
         >
-          Add a task name to show it on the chart
+          Add a milestone name to show it on the chart
         </text>
       ) : null}
 
@@ -348,10 +385,17 @@ function HillChart({
               stroke={color}
               strokeWidth="3"
               fill="none"
-              opacity="0.7"
+              opacity="0.62"
             />
-            <circle cx={point.x} cy={point.y} r="15" fill="#ffffff" opacity="0.95" />
-            <circle cx={point.x} cy={point.y} r="12" fill={color} />
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="15"
+              fill="#ffffff"
+              opacity="0.96"
+              filter="url(#soft-shadow)"
+            />
+            <circle cx={point.x} cy={point.y} r="12.5" fill={color} />
             <Label
               x={layout.labelX}
               y={layout.labelY}
@@ -389,6 +433,7 @@ function Label({
         fontFamily="Inter, Arial, sans-serif"
         fontSize="20"
         fontWeight="800"
+        letterSpacing="-0.02em"
       >
         {item.name}
       </text>
