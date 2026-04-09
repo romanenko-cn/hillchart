@@ -3,13 +3,19 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "hill": "./cli/hill.ts"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.node.json && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "hill": "tsx cli/hill.ts"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "commander": "^14.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
@@ -17,6 +23,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.4",
+    "tsx": "^4.19.3",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
     "vitest": "^3.2.4"

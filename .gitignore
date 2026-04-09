@@ -5,3 +5,5 @@ dist
 *.tsbuildinfo
 vite.config.d.ts
 vite.config.js
+hill.json
+hill.png
