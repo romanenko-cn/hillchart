@@ -154,7 +154,7 @@ h1 {
 
 .task-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 112px 28px;
+  grid-template-columns: 28px minmax(0, 1fr) 112px 52px 28px;
   gap: 10px 12px;
   align-items: start;
   position: relative;
@@ -205,8 +205,30 @@ h1 {
   text-align: center;
 }
 
-.remove-task-button {
+.label-reset-button {
   grid-column: 4;
+  align-self: end;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  background: #f7fafc;
+  color: #526176;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  min-height: 42px;
+  padding: 0 10px;
+  text-transform: uppercase;
+}
+
+.label-reset-button:disabled {
+  border-color: #e3e8ef;
+  color: #a8b1bf;
+  cursor: not-allowed;
+}
+
+.remove-task-button {
+  grid-column: 5;
   grid-row: 1;
   justify-self: end;
   align-self: start;
@@ -302,6 +324,22 @@ h1 {
   aspect-ratio: 16 / 9;
   height: min(100%, calc(100vh - 56px));
   min-height: 620px;
+}
+
+.chart-label {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.chart-label-manual {
+  paint-order: stroke;
+  stroke: rgba(36, 51, 75, 0.08);
+  stroke-width: 6px;
+}
+
+.chart-label:active {
+  cursor: grabbing;
 }
 
 @media (max-width: 980px) {
