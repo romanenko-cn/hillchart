@@ -8,6 +8,7 @@ import {
   createEmptyItems,
   createMilestoneItem,
   defaultChartTitle,
+  getPercentageFromHillX,
   maxItems,
   type HillchartItem,
   sanitizeItems,
@@ -105,6 +106,36 @@ function App() {
           ? {
               ...item,
               manualLabelPosition: clampManualLabelPosition(item, position),
+            }
+          : item,
+      ),
+    );
+  }
+
+  function updatePercentageDuringDotDrag(id: string, percentage: number) {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              percentage,
+            }
+          : item,
+      ),
+    );
+  }
+
+  function finishDotDrag(id: string, startPercentage: number, endPercentage: number) {
+    if (startPercentage === endPercentage) {
+      return;
+    }
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              manualLabelPosition: undefined,
             }
           : item,
       ),
@@ -304,6 +335,8 @@ function App() {
             items={visibleItems}
             hillPath={hillPath}
             onManualLabelChange={updateManualLabelPosition}
+            onMilestoneDrag={updatePercentageDuringDotDrag}
+            onMilestoneDragEnd={finishDotDrag}
           />
         </section>
       </section>
@@ -317,17 +350,27 @@ function HillChart({
   items,
   hillPath,
   onManualLabelChange,
+  onMilestoneDrag,
+  onMilestoneDragEnd,
 }: {
   ref: React.Ref<SVGSVGElement>;
   title: string;
   items: HillchartItem[];
   hillPath: string;
   onManualLabelChange: (id: string, position: { x: number; y: number }) => void;
+  onMilestoneDrag: (id: string, percentage: number) => void;
+  onMilestoneDragEnd: (id: string, startPercentage: number, endPercentage: number) => void;
 }) {
   const labelLayouts = useMemo(() => buildLabelLayouts(items), [items]);
   const activePointerRef = useRef<{ itemId: string; pointerId: number } | null>(null);
+  const activeDotPointerRef = useRef<{
+    itemId: string;
+    pointerId: number;
+    startPercentage: number;
+    latestPercentage: number;
+  } | null>(null);
 
-  function projectPointerToSvgCoordinates(event: React.PointerEvent<SVGTextElement>) {
+  function projectPointerToSvgCoordinates(event: React.PointerEvent<SVGElement>) {
     const svg = event.currentTarget.ownerSVGElement;
     if (!svg) {
       return null;
@@ -343,6 +386,19 @@ function HillChart({
       x: ((event.clientX - rect.left) / rect.width) * width,
       y: ((event.clientY - rect.top) / rect.height) * height,
     };
+  }
+
+  function updateDotDragFromPointer(item: HillchartItem, event: React.PointerEvent<SVGElement>) {
+    const coordinates = projectPointerToSvgCoordinates(event);
+    if (!coordinates) {
+      return;
+    }
+
+    const percentage = getPercentageFromHillX(coordinates.x);
+    if (activeDotPointerRef.current?.itemId === item.id) {
+      activeDotPointerRef.current.latestPercentage = percentage;
+    }
+    onMilestoneDrag(item.id, percentage);
   }
 
   function handleLabelPointerDown(item: HillchartItem, event: React.PointerEvent<SVGTextElement>) {
@@ -380,6 +436,49 @@ function HillChart({
       activePointerRef.current.pointerId === event.pointerId
     ) {
       activePointerRef.current = null;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function handleDotPointerDown(item: HillchartItem, event: React.PointerEvent<SVGCircleElement>) {
+    event.preventDefault();
+    activeDotPointerRef.current = {
+      itemId: item.id,
+      pointerId: event.pointerId,
+      startPercentage: item.percentage,
+      latestPercentage: item.percentage,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateDotDragFromPointer(item, event);
+  }
+
+  function handleDotPointerMove(item: HillchartItem, event: React.PointerEvent<SVGCircleElement>) {
+    if (
+      !activeDotPointerRef.current ||
+      activeDotPointerRef.current.itemId !== item.id ||
+      activeDotPointerRef.current.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    updateDotDragFromPointer(item, event);
+  }
+
+  function handleDotPointerEnd(item: HillchartItem, event: React.PointerEvent<SVGCircleElement>) {
+    if (
+      activeDotPointerRef.current &&
+      activeDotPointerRef.current.itemId === item.id &&
+      activeDotPointerRef.current.pointerId === event.pointerId
+    ) {
+      onMilestoneDragEnd(
+        item.id,
+        activeDotPointerRef.current.startPercentage,
+        activeDotPointerRef.current.latestPercentage,
+      );
+      activeDotPointerRef.current = null;
     }
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -516,6 +615,19 @@ function HillChart({
               filter="url(#soft-shadow)"
             />
             <circle cx={point.x} cy={point.y} r="12.5" fill={color} />
+            <circle
+              className="milestone-dot-hit-target"
+              data-dot-id={item.id}
+              aria-label={`Drag ${item.name} milestone dot`}
+              cx={point.x}
+              cy={point.y}
+              r="26"
+              fill="transparent"
+              onPointerDown={(event) => handleDotPointerDown(item, event)}
+              onPointerMove={(event) => handleDotPointerMove(item, event)}
+              onPointerUp={(event) => handleDotPointerEnd(item, event)}
+              onPointerCancel={(event) => handleDotPointerEnd(item, event)}
+            />
             <Label
               x={layout.labelX}
               y={layout.labelY}
