@@ -3,6 +3,7 @@ import {
   buildHillPath,
   buildLabelLayouts,
   chartBounds,
+  clampManualLabelPosition,
   clampPercentage,
   createEmptyItems,
   createMilestoneItem,
@@ -69,6 +70,7 @@ function App() {
   const [isExporting, setIsExporting] = useState(false);
   const chartRef = useRef<SVGSVGElement>(null);
   const visibleItems = items.filter((item) => item.name.trim().length > 0);
+  const hasManualLabelOverrides = items.some((item) => item.manualLabelPosition);
   const hillPath = useMemo(() => buildHillPath(), []);
 
   useEffect(() => {
@@ -81,7 +83,44 @@ function App() {
 
   function updateItem(id: string, patch: Partial<HillchartItem>) {
     setItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      current.map((item) => {
+        if (item.id !== id) {
+          return item;
+        }
+
+        const nextItem = { ...item, ...patch };
+        if (patch.percentage !== undefined && patch.percentage !== item.percentage) {
+          nextItem.manualLabelPosition = undefined;
+        }
+
+        return nextItem;
+      }),
+    );
+  }
+
+  function updateManualLabelPosition(id: string, position: { x: number; y: number }) {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              manualLabelPosition: clampManualLabelPosition(item, position),
+            }
+          : item,
+      ),
+    );
+  }
+
+  function resetManualLabelPosition(id: string) {
+    updateItem(id, { manualLabelPosition: undefined });
+  }
+
+  function resetAllManualLabelPositions() {
+    setItems((current) =>
+      current.map((item) => ({
+        ...item,
+        manualLabelPosition: undefined,
+      })),
     );
   }
 
@@ -153,6 +192,14 @@ function App() {
           <button className="secondary-button" type="button" onClick={exportChart} disabled={isExporting}>
             {isExporting ? "Exporting..." : "Copy PNG"}
           </button>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetAllManualLabelPositions}
+            disabled={!hasManualLabelOverrides}
+          >
+            Reset labels
+          </button>
           <button className="secondary-button" type="button" onClick={resetChart}>
             Reset chart
           </button>
@@ -210,6 +257,15 @@ function App() {
                 />
               </label>
               <button
+                className="label-reset-button"
+                type="button"
+                onClick={() => resetManualLabelPosition(item.id)}
+                disabled={!item.manualLabelPosition}
+                aria-label={`Reset label position for milestone ${index + 1}`}
+              >
+                Auto
+              </button>
+              <button
                 className="remove-task-button"
                 type="button"
                 onClick={() => removeItem(item.id)}
@@ -247,6 +303,7 @@ function App() {
             title={sanitizeTitle(title)}
             items={visibleItems}
             hillPath={hillPath}
+            onManualLabelChange={updateManualLabelPosition}
           />
         </section>
       </section>
@@ -259,13 +316,76 @@ function HillChart({
   title,
   items,
   hillPath,
+  onManualLabelChange,
 }: {
   ref: React.Ref<SVGSVGElement>;
   title: string;
   items: HillchartItem[];
   hillPath: string;
+  onManualLabelChange: (id: string, position: { x: number; y: number }) => void;
 }) {
   const labelLayouts = useMemo(() => buildLabelLayouts(items), [items]);
+  const activePointerRef = useRef<{ itemId: string; pointerId: number } | null>(null);
+
+  function projectPointerToSvgCoordinates(event: React.PointerEvent<SVGTextElement>) {
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) {
+      return null;
+    }
+
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return null;
+    }
+
+    const { width, height } = svg.viewBox.baseVal;
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * width,
+      y: ((event.clientY - rect.top) / rect.height) * height,
+    };
+  }
+
+  function handleLabelPointerDown(item: HillchartItem, event: React.PointerEvent<SVGTextElement>) {
+    event.preventDefault();
+    activePointerRef.current = {
+      itemId: item.id,
+      pointerId: event.pointerId,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const coordinates = projectPointerToSvgCoordinates(event);
+    if (coordinates) {
+      onManualLabelChange(item.id, coordinates);
+    }
+  }
+
+  function handleLabelPointerMove(item: HillchartItem, event: React.PointerEvent<SVGTextElement>) {
+    if (
+      !activePointerRef.current ||
+      activePointerRef.current.itemId !== item.id ||
+      activePointerRef.current.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    const coordinates = projectPointerToSvgCoordinates(event);
+    if (coordinates) {
+      onManualLabelChange(item.id, coordinates);
+    }
+  }
+
+  function handleLabelPointerEnd(item: HillchartItem, event: React.PointerEvent<SVGTextElement>) {
+    if (
+      activePointerRef.current &&
+      activePointerRef.current.itemId === item.id &&
+      activePointerRef.current.pointerId === event.pointerId
+    ) {
+      activePointerRef.current = null;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
 
   return (
     <svg
@@ -402,6 +522,10 @@ function HillChart({
               anchor={layout.textAnchor}
               color={color}
               item={item}
+              onPointerDown={handleLabelPointerDown}
+              onPointerMove={handleLabelPointerMove}
+              onPointerUp={handleLabelPointerEnd}
+              onPointerCancel={handleLabelPointerEnd}
             />
           </g>
         );
@@ -416,16 +540,26 @@ function Label({
   anchor,
   color,
   item,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
 }: {
   x: number;
   y: number;
   anchor: "start" | "middle" | "end";
   color: string;
   item: HillchartItem;
+  onPointerDown: (item: HillchartItem, event: React.PointerEvent<SVGTextElement>) => void;
+  onPointerMove: (item: HillchartItem, event: React.PointerEvent<SVGTextElement>) => void;
+  onPointerUp: (item: HillchartItem, event: React.PointerEvent<SVGTextElement>) => void;
+  onPointerCancel: (item: HillchartItem, event: React.PointerEvent<SVGTextElement>) => void;
 }) {
   return (
     <g>
       <text
+        className={item.manualLabelPosition ? "chart-label chart-label-manual" : "chart-label"}
+        data-label-id={item.id}
         x={x}
         y={y}
         textAnchor={anchor}
@@ -434,6 +568,10 @@ function Label({
         fontSize="20"
         fontWeight="800"
         letterSpacing="-0.02em"
+        onPointerDown={(event) => onPointerDown(item, event)}
+        onPointerMove={(event) => onPointerMove(item, event)}
+        onPointerUp={(event) => onPointerUp(item, event)}
+        onPointerCancel={(event) => onPointerCancel(item, event)}
       >
         {item.name}
       </text>

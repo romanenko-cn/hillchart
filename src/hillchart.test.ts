@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildLabelLayouts,
   chartBounds,
+  clampManualLabelPosition,
   clampPercentage,
   createEmptyItems,
   createMilestoneItem,
   defaultChartTitle,
   getHillPoint,
+  labelLayoutBounds,
   maxItems,
   sanitizeItems,
   sanitizeTitle,
@@ -60,6 +62,44 @@ describe("buildLabelLayouts", () => {
       });
     });
   });
+
+  it("uses manual label positions when provided", () => {
+    const [layout] = buildLabelLayouts([
+      {
+        id: "manual",
+        name: "Manual Label",
+        percentage: 20,
+        manualLabelPosition: {
+          x: 420,
+          y: 180,
+        },
+      },
+    ]);
+
+    expect(layout.labelX).toBe(420);
+    expect(layout.labelY).toBe(180);
+    expect(layout.leaderEndX).toBe(420);
+    expect(layout.box.left).toBeLessThan(layout.box.right);
+  });
+
+  it("clamps manual label positions into the visible layout frame", () => {
+    const [layout] = buildLabelLayouts([
+      {
+        id: "manual",
+        name: "A very long manual label that should be clamped safely",
+        percentage: 65,
+        manualLabelPosition: {
+          x: 9999,
+          y: -200,
+        },
+      },
+    ]);
+
+    expect(layout.labelX).toBeLessThanOrEqual(labelLayoutBounds.maxCenterX - 64);
+    expect(layout.labelY).toBe(labelLayoutBounds.minCenterY);
+    expect(layout.box.left).toBeGreaterThanOrEqual(labelLayoutBounds.minCenterX);
+    expect(layout.box.top).toBeGreaterThanOrEqual(labelLayoutBounds.minCenterY - 24);
+  });
 });
 
 function overlaps(
@@ -95,6 +135,38 @@ describe("sanitizeItems", () => {
         Array.from({ length: maxItems + 2 }, (_, index) => createMilestoneItem(index + 1)),
       ),
     ).toHaveLength(maxItems);
+  });
+
+  it("preserves valid manual label positions and drops malformed ones", () => {
+    const items = sanitizeItems([
+      {
+        id: "existing",
+        name: "Lookup API",
+        percentage: 70,
+        manualLabelPosition: { x: 450, y: 180 },
+      },
+      {
+        id: "bad",
+        name: "Bad",
+        percentage: 20,
+        manualLabelPosition: { x: "oops", y: 180 },
+      },
+    ]);
+
+    expect(items[0].manualLabelPosition).toEqual({ x: 450, y: 180 });
+    expect(items[1].manualLabelPosition).toBeUndefined();
+  });
+});
+
+describe("clampManualLabelPosition", () => {
+  it("keeps a dragged label fully inside the safe layout frame", () => {
+    const clamped = clampManualLabelPosition(
+      { name: "Long milestone name" },
+      { x: -100, y: 1000 },
+    );
+
+    expect(clamped.x).toBeGreaterThanOrEqual(labelLayoutBounds.minCenterX + 64);
+    expect(clamped.y).toBe(labelLayoutBounds.maxCenterY);
   });
 });
 

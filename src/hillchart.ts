@@ -2,6 +2,7 @@ export type HillchartItem = {
   id: string;
   name: string;
   percentage: number;
+  manualLabelPosition?: ChartPoint;
 };
 
 export type ChartPoint = {
@@ -26,6 +27,16 @@ type LabelBox = {
   right: number;
   top: number;
   bottom: number;
+};
+
+const labelBoxHeight = 48;
+const labelTopOffset = 24;
+
+export const labelLayoutBounds = {
+  minCenterX: 118,
+  maxCenterX: 1258,
+  minCenterY: 126,
+  maxCenterY: 612,
 };
 
 export const chartBounds = {
@@ -98,13 +109,14 @@ export function buildLabelLayouts(items: HillchartItem[]): HillchartLabelLayout[
     .map((item, index) => ({ item, index, point: getHillPoint(item.percentage) }))
     .sort((first, second) => first.point.x - second.point.x)
     .forEach(({ item, index, point }) => {
-      const candidates = createLabelCandidates(item, point, index);
-      const best = candidates
-        .map((candidate) => ({
-          candidate,
-          score: scoreCandidate(candidate.box, placed, candidate.distancePenalty),
-        }))
-        .sort((first, second) => first.score - second.score)[0].candidate;
+      const best = item.manualLabelPosition
+        ? createManualLabelCandidate(item, point)
+        : createLabelCandidates(item, point, index)
+            .map((candidate) => ({
+              candidate,
+              score: scoreCandidate(candidate.box, placed, candidate.distancePenalty),
+            }))
+            .sort((first, second) => first.score - second.score)[0].candidate;
 
       placed.push({
         item,
@@ -134,10 +146,13 @@ function smootherStep(value: number): number {
 
 function createLabelCandidates(item: HillchartItem, point: ChartPoint, index: number) {
   const width = estimateLabelWidth(item);
-  const height = 48;
-  const preferredX = clamp(point.x, 118 + width / 2, 1258 - width / 2);
+  const preferredX = clamp(point.x, labelLayoutBounds.minCenterX + width / 2, labelLayoutBounds.maxCenterX - width / 2);
   const preferredAbove = point.y > 360 || index % 2 === 0;
-  const preferredY = clamp(point.y + (preferredAbove ? -74 : 86), 126, 612);
+  const preferredY = clamp(
+    point.y + (preferredAbove ? -74 : 86),
+    labelLayoutBounds.minCenterY,
+    labelLayoutBounds.maxCenterY,
+  );
   const laneYs = [126, 206, 286, 366, 446, 526, 606];
   const yCandidates = [
     preferredY,
@@ -149,18 +164,15 @@ function createLabelCandidates(item: HillchartItem, point: ChartPoint, index: nu
 
   return yCandidates.flatMap((labelY, laneIndex) =>
     xOffsets.map((xOffset, xIndex) => {
-      const centerX = clamp(preferredX + xOffset, 118 + width / 2, 1258 - width / 2);
+      const centerX = clamp(
+        preferredX + xOffset,
+        labelLayoutBounds.minCenterX + width / 2,
+        labelLayoutBounds.maxCenterX - width / 2,
+      );
       const above = labelY < point.y;
       const horizontalPenalty = Math.abs(centerX - preferredX) / 4;
       const verticalPenalty = Math.abs(labelY - preferredY) / 6;
       const lanePenalty = laneIndex * 3 + xIndex * 8;
-
-      const box = {
-        left: centerX - width / 2,
-        right: centerX + width / 2,
-        top: labelY - 24,
-        bottom: labelY + height,
-      };
 
       return {
         above,
@@ -168,10 +180,33 @@ function createLabelCandidates(item: HillchartItem, point: ChartPoint, index: nu
         labelY,
         textAnchor: "middle" as const,
         distancePenalty: lanePenalty + horizontalPenalty + verticalPenalty,
-        box,
+        box: createLabelBox(centerX, labelY, width),
       };
     }),
   );
+}
+
+function createManualLabelCandidate(item: HillchartItem, point: ChartPoint) {
+  const manualPosition = clampManualLabelPosition(item, item.manualLabelPosition);
+  const above = manualPosition.y < point.y;
+
+  return {
+    above,
+    labelX: manualPosition.x,
+    labelY: manualPosition.y,
+    textAnchor: "middle" as const,
+    distancePenalty: 0,
+    box: createLabelBox(manualPosition.x, manualPosition.y, estimateLabelWidth(item)),
+  };
+}
+
+function createLabelBox(centerX: number, labelY: number, width: number): LabelBox {
+  return {
+    left: centerX - width / 2,
+    right: centerX + width / 2,
+    top: labelY - labelTopOffset,
+    bottom: labelY + labelBoxHeight,
+  };
 }
 
 function scoreCandidate(
@@ -206,6 +241,26 @@ function estimateLabelWidth(item: HillchartItem): number {
   return clamp(titleWidth + 26, 128, 300);
 }
 
+export function clampManualLabelPosition(
+  item: Pick<HillchartItem, "name">,
+  position: ChartPoint | undefined,
+): ChartPoint {
+  const width = estimateLabelWidth({ ...item, id: "", percentage: 0 });
+
+  return {
+    x: clamp(
+      position?.x ?? labelLayoutBounds.minCenterX,
+      labelLayoutBounds.minCenterX + width / 2,
+      labelLayoutBounds.maxCenterX - width / 2,
+    ),
+    y: clamp(
+      position?.y ?? labelLayoutBounds.minCenterY,
+      labelLayoutBounds.minCenterY,
+      labelLayoutBounds.maxCenterY,
+    ),
+  };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -235,7 +290,19 @@ function sanitizeItem(value: unknown, index: number): HillchartItem {
         : createMilestoneId(),
     name: typeof candidate.name === "string" ? candidate.name : "",
     percentage: clampPercentage(Number(candidate.percentage)),
+    manualLabelPosition: sanitizeManualLabelPosition(candidate.manualLabelPosition),
   };
+}
+
+function sanitizeManualLabelPosition(value: unknown): ChartPoint | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = value as Partial<ChartPoint>;
+  return Number.isFinite(candidate.x) && Number.isFinite(candidate.y)
+    ? { x: Number(candidate.x), y: Number(candidate.y) }
+    : undefined;
 }
 
 function defaultPercentageForIndex(index: number): number {

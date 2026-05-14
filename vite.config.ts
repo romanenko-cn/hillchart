@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [react()],
   base: "/hillchart/",
   test: {
-    environment: "node",
+    environment: "jsdom",
   },
 });
