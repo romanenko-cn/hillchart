@@ -90,6 +90,121 @@ describe("App", () => {
     expect(leaderLine?.getAttribute("d")).toContain("H 610");
   });
 
+  it("drags milestone dots along the hill and updates the percentage input", () => {
+    seedChartState([
+      { id: "m1", name: "Milestone A", percentage: 20 },
+      { id: "m2", name: "Milestone B", percentage: 50 },
+    ]);
+
+    const { container } = render(<App />);
+    const svg = container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    mockSvgBounds(svg!);
+
+    const dot = container.querySelector('[data-dot-id="m1"]');
+    expect(dot).not.toBeNull();
+
+    fireEvent.pointerDown(dot!, { pointerId: 2, clientX: 299, clientY: 540 });
+    fireEvent.pointerMove(dot!, { pointerId: 2, clientX: 558, clientY: 100 });
+    fireEvent.pointerUp(dot!, { pointerId: 2, clientX: 558, clientY: 100 });
+
+    expect((screen.getByLabelText("Percentage for milestone 1") as HTMLInputElement).value).toBe("40");
+    expect((screen.getByLabelText("Percentage for milestone 2") as HTMLInputElement).value).toBe("50");
+
+    const movedDot = container.querySelector('[data-dot-id="m1"]');
+    expect(movedDot?.getAttribute("cx")).toBe("558.4");
+  });
+
+  it("keeps manual label position during dot drag and resets it on release", () => {
+    seedChartState([
+      {
+        id: "m1",
+        name: "Milestone A",
+        percentage: 20,
+        manualLabelPosition: { x: 480, y: 210 },
+      },
+    ]);
+
+    const { container } = render(<App />);
+    const svg = container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    mockSvgBounds(svg!);
+
+    const label = screen.getByText("Milestone A");
+    const resetButton = screen.getByRole("button", {
+      name: "Reset label position for milestone 1",
+    });
+    const dot = container.querySelector('[data-dot-id="m1"]');
+    expect(dot).not.toBeNull();
+
+    fireEvent.pointerDown(dot!, { pointerId: 3, clientX: 299, clientY: 540 });
+    fireEvent.pointerMove(dot!, { pointerId: 3, clientX: 558, clientY: 100 });
+
+    expect(label.getAttribute("x")).toBe("480");
+    expect(label.getAttribute("y")).toBe("210");
+    expect(resetButton.hasAttribute("disabled")).toBe(false);
+
+    fireEvent.pointerUp(dot!, { pointerId: 3, clientX: 558, clientY: 100 });
+
+    expect((screen.getByLabelText("Percentage for milestone 1") as HTMLInputElement).value).toBe("40");
+    expect(resetButton.hasAttribute("disabled")).toBe(true);
+    expect(label.getAttribute("x")).not.toBe("480");
+    expect(label.getAttribute("y")).not.toBe("210");
+  });
+
+  it("clamps dot dragging at chart boundaries", () => {
+    seedChartState([{ id: "m1", name: "Milestone A", percentage: 50 }]);
+
+    const { container } = render(<App />);
+    const svg = container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    mockSvgBounds(svg!);
+
+    const dot = container.querySelector('[data-dot-id="m1"]');
+    expect(dot).not.toBeNull();
+
+    fireEvent.pointerDown(dot!, { pointerId: 4, clientX: 688, clientY: 300 });
+    fireEvent.pointerMove(dot!, { pointerId: 4, clientX: -200, clientY: 300 });
+    fireEvent.pointerUp(dot!, { pointerId: 4, clientX: -200, clientY: 300 });
+    expect((screen.getByLabelText("Percentage for milestone 1") as HTMLInputElement).value).toBe("0");
+
+    const updatedDot = container.querySelector('[data-dot-id="m1"]');
+    fireEvent.pointerDown(updatedDot!, { pointerId: 5, clientX: 40, clientY: 682 });
+    fireEvent.pointerMove(updatedDot!, { pointerId: 5, clientX: 1600, clientY: 682 });
+    fireEvent.pointerUp(updatedDot!, { pointerId: 5, clientX: 1600, clientY: 682 });
+    expect((screen.getByLabelText("Percentage for milestone 1") as HTMLInputElement).value).toBe("100");
+  });
+
+  it("finalizes dot drag state on pointer cancel", () => {
+    seedChartState([
+      {
+        id: "m1",
+        name: "Milestone A",
+        percentage: 20,
+        manualLabelPosition: { x: 480, y: 210 },
+      },
+    ]);
+
+    const { container } = render(<App />);
+    const svg = container.querySelector("svg");
+    expect(svg).not.toBeNull();
+    mockSvgBounds(svg!);
+
+    const dot = container.querySelector('[data-dot-id="m1"]');
+    expect(dot).not.toBeNull();
+
+    fireEvent.pointerDown(dot!, { pointerId: 6, clientX: 299, clientY: 540 });
+    fireEvent.pointerMove(dot!, { pointerId: 6, clientX: 558, clientY: 100 });
+    fireEvent.pointerCancel(dot!, { pointerId: 6, clientX: 558, clientY: 100 });
+
+    expect((screen.getByLabelText("Percentage for milestone 1") as HTMLInputElement).value).toBe("40");
+    expect(
+      screen
+        .getByRole("button", { name: "Reset label position for milestone 1" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("clears a manual override when the milestone percentage changes", () => {
     seedChartState([
       {

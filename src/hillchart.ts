@@ -92,6 +92,13 @@ export function getHillPoint(percentage: number): ChartPoint {
   };
 }
 
+export function getPercentageFromHillX(x: number): number {
+  const width = chartBounds.right - chartBounds.left;
+  const progress = (x - chartBounds.left) / width;
+
+  return clampPercentage(progress * 100);
+}
+
 export function buildHillPath(steps = 180): string {
   const points = Array.from({ length: steps + 1 }, (_, index) =>
     getHillPoint((index / steps) * 100),

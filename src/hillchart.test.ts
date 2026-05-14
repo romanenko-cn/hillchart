@@ -8,6 +8,7 @@ import {
   createMilestoneItem,
   defaultChartTitle,
   getHillPoint,
+  getPercentageFromHillX,
   labelLayoutBounds,
   maxItems,
   sanitizeItems,
@@ -44,6 +45,26 @@ describe("getHillPoint", () => {
 
     expect(leftQuarter.y).toBeCloseTo(rightQuarter.y);
     expect(leftQuarter.x + rightQuarter.x).toBeCloseTo(chartBounds.left + chartBounds.right);
+  });
+});
+
+describe("getPercentageFromHillX", () => {
+  it("maps chart bounds back to percentages", () => {
+    expect(getPercentageFromHillX(chartBounds.left)).toBe(0);
+    expect(getPercentageFromHillX(chartBounds.center)).toBe(50);
+    expect(getPercentageFromHillX(chartBounds.right)).toBe(100);
+  });
+
+  it("clamps coordinates outside the hill range", () => {
+    expect(getPercentageFromHillX(chartBounds.left - 200)).toBe(0);
+    expect(getPercentageFromHillX(chartBounds.right + 200)).toBe(100);
+  });
+
+  it("rounds fractional positions like percentage input", () => {
+    const width = chartBounds.right - chartBounds.left;
+
+    expect(getPercentageFromHillX(chartBounds.left + width * 0.424)).toBe(42);
+    expect(getPercentageFromHillX(chartBounds.left + width * 0.425)).toBe(43);
   });
 });
 
