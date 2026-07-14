@@ -15,10 +15,30 @@ import {
   sanitizeTitle,
 } from "./hillchart";
 import { copySvgChartAsPng, sanitizeImageFilename } from "./imageExport";
+import rebelLoonSvg from "./assets/rebel-loon.svg?raw";
+import {
+  buildStarPoints,
+  dotShapes,
+  dotShapeStorageKey,
+  isDotShape,
+  loadDotShape,
+  type DotShape,
+} from "./dotShape";
 import "./App.css";
+
+declare global {
+  interface Window {
+    hillchart: {
+      setDotShape: (shape: string) => DotShape;
+      getDotShape: () => DotShape;
+      dotShapes: readonly DotShape[];
+    };
+  }
+}
 
 const itemsStorageKey = "hillchart.items.v1";
 const titleStorageKey = "hillchart.title.v1";
+const rebelLoonDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(rebelLoonSvg)}`;
 const placementGuidelines = [
   "0-35: still figuring out the problem or approach",
   "36-49: approaching clarity, but important unknowns remain",
@@ -67,6 +87,7 @@ function markerColor(percentage: number): string {
 function App() {
   const [title, setTitle] = useState(loadTitle);
   const [items, setItems] = useState<HillchartItem[]>(loadItems);
+  const [dotShape, setDotShape] = useState<DotShape>(loadDotShape);
   const [exportStatus, setExportStatus] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const chartRef = useRef<SVGSVGElement>(null);
@@ -81,6 +102,35 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(titleStorageKey, sanitizeTitle(title));
   }, [title]);
+
+  useEffect(() => {
+    window.localStorage.setItem(dotShapeStorageKey, dotShape);
+  }, [dotShape]);
+
+  useEffect(() => {
+    const api = {
+      setDotShape(shape: string) {
+        if (!isDotShape(shape)) {
+          throw new RangeError(
+            `Unknown dot shape "${shape}". Use one of: ${dotShapes.join(", ")}.`,
+          );
+        }
+
+        setDotShape(shape);
+        return shape;
+      },
+      getDotShape: () => dotShape,
+      dotShapes,
+    };
+
+    window.hillchart = api;
+
+    return () => {
+      if (window.hillchart === api) {
+        delete (window as Partial<Window>).hillchart;
+      }
+    };
+  }, [dotShape]);
 
   function updateItem(id: string, patch: Partial<HillchartItem>) {
     setItems((current) =>
@@ -334,6 +384,7 @@ function App() {
             title={sanitizeTitle(title)}
             items={visibleItems}
             hillPath={hillPath}
+            dotShape={dotShape}
             onManualLabelChange={updateManualLabelPosition}
             onMilestoneDrag={updatePercentageDuringDotDrag}
             onMilestoneDragEnd={finishDotDrag}
@@ -349,6 +400,7 @@ function HillChart({
   title,
   items,
   hillPath,
+  dotShape,
   onManualLabelChange,
   onMilestoneDrag,
   onMilestoneDragEnd,
@@ -357,6 +409,7 @@ function HillChart({
   title: string;
   items: HillchartItem[];
   hillPath: string;
+  dotShape: DotShape;
   onManualLabelChange: (id: string, position: { x: number; y: number }) => void;
   onMilestoneDrag: (id: string, percentage: number) => void;
   onMilestoneDragEnd: (id: string, startPercentage: number, endPercentage: number) => void;
@@ -606,15 +659,7 @@ function HillChart({
               fill="none"
               opacity="0.62"
             />
-            <circle
-              cx={point.x}
-              cy={point.y}
-              r="15"
-              fill="#ffffff"
-              opacity="0.96"
-              filter="url(#soft-shadow)"
-            />
-            <circle cx={point.x} cy={point.y} r="12.5" fill={color} />
+            <Marker shape={dotShape} x={point.x} y={point.y} color={color} itemId={item.id} />
             <circle
               className="milestone-dot-hit-target"
               data-dot-id={item.id}
@@ -643,6 +688,52 @@ function HillChart({
         );
       })}
     </svg>
+  );
+}
+
+function Marker({
+  shape,
+  x,
+  y,
+  color,
+  itemId,
+}: {
+  shape: DotShape;
+  x: number;
+  y: number;
+  color: string;
+  itemId: string;
+}) {
+  if (shape === "rebel-loon") {
+    return (
+      <g data-marker-id={itemId} data-marker-shape="rebel-loon" filter="url(#soft-shadow)">
+        <circle cx={x} cy={y} r="18" fill="#ffffff" opacity="0.96" />
+        <image
+          href={rebelLoonDataUrl}
+          x={x - 16}
+          y={y - 16}
+          width="32"
+          height="32"
+          preserveAspectRatio="xMidYMid meet"
+        />
+      </g>
+    );
+  }
+
+  if (shape === "star") {
+    return (
+      <g data-marker-id={itemId} data-marker-shape="star" filter="url(#soft-shadow)">
+        <polygon points={buildStarPoints(x, y, 18, 8.5)} fill="#ffffff" opacity="0.96" />
+        <polygon points={buildStarPoints(x, y, 15, 7)} fill={color} />
+      </g>
+    );
+  }
+
+  return (
+    <g data-marker-id={itemId} data-marker-shape="dot" filter="url(#soft-shadow)">
+      <circle cx={x} cy={y} r="15" fill="#ffffff" opacity="0.96" />
+      <circle cx={x} cy={y} r="12.5" fill={color} />
+    </g>
   );
 }
 
