@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 const itemsStorageKey = "hillchart.items.v1";
 const titleStorageKey = "hillchart.title.v1";
+const dotShapeStorageKey = "hillchart.dotShape.v1";
 
 const pointerCaptures = new WeakMap<Element, Set<number>>();
 const storage = createStorageMock();
@@ -53,6 +54,72 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  it("uses dot markers by default and exposes the available console settings", () => {
+    seedChartState([{ id: "m1", name: "Milestone A", percentage: 20 }]);
+
+    const { container } = render(<App />);
+
+    expect(container.querySelector('[data-marker-shape="dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-marker-shape="star"]')).toBeNull();
+    expect(window.hillchart.getDotShape()).toBe("dot");
+    expect(window.hillchart.dotShapes).toEqual(["dot", "star", "rebel-loon"]);
+  });
+
+  it("changes marker shapes from the console API and persists the setting", () => {
+    seedChartState([{ id: "m1", name: "Milestone A", percentage: 20 }]);
+
+    const { container } = render(<App />);
+
+    act(() => {
+      expect(window.hillchart.setDotShape("star")).toBe("star");
+    });
+
+    const star = container.querySelector('[data-marker-shape="star"]');
+    expect(star).not.toBeNull();
+    expect(star?.querySelectorAll("polygon")).toHaveLength(2);
+    expect(window.hillchart.getDotShape()).toBe("star");
+    expect(window.localStorage.getItem(dotShapeStorageKey)).toBe("star");
+  });
+
+  it("restores the persisted star shape on reopen", () => {
+    seedChartState([{ id: "m1", name: "Milestone A", percentage: 20 }]);
+    window.localStorage.setItem(dotShapeStorageKey, "star");
+
+    const { container } = render(<App />);
+
+    expect(container.querySelector('[data-marker-shape="star"]')).not.toBeNull();
+    expect(window.hillchart.getDotShape()).toBe("star");
+  });
+
+  it("renders and persists the Rebel Loon marker from the console API", () => {
+    seedChartState([{ id: "m1", name: "Milestone A", percentage: 20 }]);
+
+    const { container } = render(<App />);
+
+    act(() => {
+      window.hillchart.setDotShape("rebel-loon");
+    });
+
+    const marker = container.querySelector('[data-marker-shape="rebel-loon"]');
+    expect(marker).not.toBeNull();
+    expect(marker?.querySelector("image")?.getAttribute("href")).toMatch(
+      /^data:image\/svg\+xml;charset=utf-8,/,
+    );
+    expect(window.localStorage.getItem(dotShapeStorageKey)).toBe("rebel-loon");
+  });
+
+  it("rejects unknown console dot shapes without changing the current shape", () => {
+    seedChartState([{ id: "m1", name: "Milestone A", percentage: 20 }]);
+
+    const { container } = render(<App />);
+
+    expect(() => window.hillchart.setDotShape("triangle")).toThrow(
+      'Unknown dot shape "triangle". Use one of: dot, star, rebel-loon.',
+    );
+    expect(window.hillchart.getDotShape()).toBe("dot");
+    expect(container.querySelector('[data-marker-shape="dot"]')).not.toBeNull();
+  });
+
   it("restores persisted manual label positions on reopen", () => {
     seedChartState([
       {
