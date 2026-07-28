@@ -81,6 +81,120 @@ h1 {
   font-weight: 700;
 }
 
+.project-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  max-width: 1280px;
+  margin: 0 auto 18px;
+  border: 1px solid rgba(183, 196, 214, 0.48);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 28px rgba(118, 137, 162, 0.09);
+  padding: 14px 16px;
+  backdrop-filter: blur(10px);
+}
+
+.project-selector {
+  display: grid;
+  flex: 1;
+  gap: 7px;
+  max-width: 520px;
+  color: #677387;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.project-selector select {
+  width: 100%;
+  border: 1px solid #d9e0e9;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #172235;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: normal;
+  padding: 11px 38px 11px 13px;
+  text-transform: none;
+}
+
+.project-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.project-create-button,
+.project-delete-button {
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 11px 16px;
+  white-space: nowrap;
+}
+
+.project-create-button {
+  border: 1px solid #9ed7d4;
+  background: #eefaf9;
+  color: #1e7d79;
+}
+
+.project-create-button:hover {
+  border-color: #2f9c96;
+  background: #e4f7f5;
+}
+
+.project-delete-button {
+  border: 1px solid #e4b5b5;
+  background: #fffafa;
+  color: #963f3f;
+}
+
+.project-delete-button:hover:not(:disabled) {
+  border-color: #c96f6f;
+  background: #fff3f3;
+}
+
+.project-delete-button:disabled {
+  border-color: #dfe5ed;
+  background: #f7f9fc;
+  color: #a8b1bf;
+  cursor: not-allowed;
+}
+
+.project-selector select:focus-visible,
+.project-create-button:focus-visible,
+.project-delete-button:focus-visible {
+  outline: 3px solid rgba(47, 156, 150, 0.24);
+  outline-offset: 2px;
+}
+
+.projects-empty-state {
+  max-width: 1280px;
+  margin: 0 auto;
+  border: 1px dashed #bcc9d8;
+  border-radius: 34px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: clamp(48px, 10vw, 110px) 28px;
+  text-align: center;
+}
+
+.projects-empty-state h2 {
+  margin-bottom: 12px;
+  color: #172235;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+  letter-spacing: -0.04em;
+}
+
+.projects-empty-state > p:not(.eyebrow) {
+  margin-bottom: 24px;
+  color: #677387;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
@@ -454,5 +568,19 @@ h1 {
   .editor,
   .chart-card {
     border-radius: 20px;
+  }
+
+  .project-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-selector {
+    max-width: none;
+  }
+
+  .project-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
