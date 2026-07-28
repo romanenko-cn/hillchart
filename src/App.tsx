@@ -11,7 +11,6 @@ import {
   getPercentageFromHillX,
   maxItems,
   type HillchartItem,
-  sanitizeItems,
   sanitizeTitle,
 } from "./hillchart";
 import { copySvgChartAsPng, sanitizeImageFilename } from "./imageExport";
@@ -19,11 +18,15 @@ import rebelLoonSvg from "./assets/rebel-loon.svg?raw";
 import {
   buildStarPoints,
   dotShapes,
-  dotShapeStorageKey,
   isDotShape,
-  loadDotShape,
   type DotShape,
 } from "./dotShape";
+import {
+  createProject,
+  loadProjectStore,
+  saveProjectStore,
+  type HillchartProject,
+} from "./projects";
 import "./App.css";
 
 declare global {
@@ -36,8 +39,6 @@ declare global {
   }
 }
 
-const itemsStorageKey = "hillchart.items.v1";
-const titleStorageKey = "hillchart.title.v1";
 const rebelLoonDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(rebelLoonSvg)}`;
 const placementGuidelines = [
   "0-35: still figuring out the problem or approach",
@@ -48,27 +49,6 @@ const placementGuidelines = [
   "85-94: QA has meaningfully exercised it and remaining work is mostly bug fixes / hardening",
   "95-100: effectively done, accepted, or only trivial wrap-up remains",
 ];
-
-function loadItems(): HillchartItem[] {
-  if (typeof window === "undefined") {
-    return createEmptyItems();
-  }
-
-  try {
-    const stored = window.localStorage.getItem(itemsStorageKey);
-    return stored ? sanitizeItems(JSON.parse(stored)) : createEmptyItems();
-  } catch {
-    return createEmptyItems();
-  }
-}
-
-function loadTitle(): string {
-  if (typeof window === "undefined") {
-    return defaultChartTitle;
-  }
-
-  return sanitizeTitle(window.localStorage.getItem(titleStorageKey));
-}
 
 function markerColor(percentage: number): string {
   if (percentage < 34) {
@@ -85,27 +65,22 @@ function markerColor(percentage: number): string {
 }
 
 function App() {
-  const [title, setTitle] = useState(loadTitle);
-  const [items, setItems] = useState<HillchartItem[]>(loadItems);
-  const [dotShape, setDotShape] = useState<DotShape>(loadDotShape);
+  const [projectStore, setProjectStore] = useState(loadProjectStore);
   const [exportStatus, setExportStatus] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const chartRef = useRef<SVGSVGElement>(null);
+  const activeProject =
+    projectStore.projects.find((project) => project.id === projectStore.activeProjectId) ?? null;
+  const title = activeProject?.title ?? defaultChartTitle;
+  const items = activeProject?.items ?? [];
+  const dotShape = activeProject?.dotShape ?? "dot";
   const visibleItems = items.filter((item) => item.name.trim().length > 0);
   const hasManualLabelOverrides = items.some((item) => item.manualLabelPosition);
   const hillPath = useMemo(() => buildHillPath(), []);
 
   useEffect(() => {
-    window.localStorage.setItem(itemsStorageKey, JSON.stringify(items));
-  }, [items]);
-
-  useEffect(() => {
-    window.localStorage.setItem(titleStorageKey, sanitizeTitle(title));
-  }, [title]);
-
-  useEffect(() => {
-    window.localStorage.setItem(dotShapeStorageKey, dotShape);
-  }, [dotShape]);
+    saveProjectStore(projectStore);
+  }, [projectStore]);
 
   useEffect(() => {
     const api = {
@@ -116,7 +91,7 @@ function App() {
           );
         }
 
-        setDotShape(shape);
+        updateActiveProject({ dotShape: shape });
         return shape;
       },
       getDotShape: () => dotShape,
@@ -130,7 +105,73 @@ function App() {
         delete (window as Partial<Window>).hillchart;
       }
     };
-  }, [dotShape]);
+  }, [activeProject?.id, dotShape]);
+
+  function updateActiveProject(
+    patch:
+      | Partial<Omit<HillchartProject, "id">>
+      | ((project: HillchartProject) => HillchartProject),
+  ) {
+    setProjectStore((current) => ({
+      ...current,
+      projects: current.projects.map((project) => {
+        if (project.id !== current.activeProjectId) {
+          return project;
+        }
+
+        return typeof patch === "function" ? patch(project) : { ...project, ...patch };
+      }),
+    }));
+  }
+
+  function setItems(
+    updater: HillchartItem[] | ((current: HillchartItem[]) => HillchartItem[]),
+  ) {
+    updateActiveProject((project) => ({
+      ...project,
+      items: typeof updater === "function" ? updater(project.items) : updater,
+    }));
+  }
+
+  function createNewProject() {
+    const project = createProject();
+    setProjectStore((current) => ({
+      ...current,
+      activeProjectId: project.id,
+      projects: [...current.projects, project],
+    }));
+    setExportStatus("");
+  }
+
+  function deleteActiveProject() {
+    if (
+      !activeProject ||
+      !window.confirm(`Delete "${activeProject.title}"? This cannot be undone.`)
+    ) {
+      return;
+    }
+
+    setProjectStore((current) => {
+      const deletedIndex = current.projects.findIndex(
+        (project) => project.id === current.activeProjectId,
+      );
+      if (deletedIndex < 0) {
+        return current;
+      }
+
+      const projects = current.projects.filter(
+        (project) => project.id !== current.activeProjectId,
+      );
+      const nextProject = projects[Math.min(deletedIndex, projects.length - 1)];
+
+      return {
+        ...current,
+        activeProjectId: nextProject?.id ?? null,
+        projects,
+      };
+    });
+    setExportStatus("");
+  }
 
   function updateItem(id: string, patch: Partial<HillchartItem>) {
     setItems((current) =>
@@ -226,10 +267,11 @@ function App() {
   }
 
   function resetChart() {
-    setTitle(defaultChartTitle);
-    setItems(createEmptyItems());
-    window.localStorage.removeItem(itemsStorageKey);
-    window.localStorage.removeItem(titleStorageKey);
+    updateActiveProject({
+      title: defaultChartTitle,
+      items: createEmptyItems(),
+      dotShape: "dot",
+    });
   }
 
   async function exportChart() {
@@ -270,18 +312,28 @@ function App() {
           </p>
         </div>
         <div className="hero-actions">
-          <button className="secondary-button" type="button" onClick={exportChart} disabled={isExporting}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={exportChart}
+            disabled={isExporting || !activeProject}
+          >
             {isExporting ? "Exporting..." : "Copy PNG"}
           </button>
           <button
             className="secondary-button"
             type="button"
             onClick={resetAllManualLabelPositions}
-            disabled={!hasManualLabelOverrides}
+            disabled={!activeProject || !hasManualLabelOverrides}
           >
             Reset labels
           </button>
-          <button className="secondary-button" type="button" onClick={resetChart}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={resetChart}
+            disabled={!activeProject}
+          >
             Reset chart
           </button>
         </div>
@@ -289,17 +341,55 @@ function App() {
 
       {exportStatus ? <p className="export-status">{exportStatus}</p> : null}
 
+      <section className="project-toolbar" aria-label="Project controls">
+        <label className="project-selector">
+          <span>Project</span>
+          <select
+            value={activeProject?.id ?? ""}
+            onChange={(event) => {
+              setProjectStore((current) => ({
+                ...current,
+                activeProjectId: event.target.value,
+              }));
+              setExportStatus("");
+            }}
+            disabled={projectStore.projects.length === 0}
+          >
+            {projectStore.projects.length === 0 ? <option value="">No projects</option> : null}
+            {projectStore.projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="project-actions">
+          <button className="project-create-button" type="button" onClick={createNewProject}>
+            New project
+          </button>
+          <button
+            className="project-delete-button"
+            type="button"
+            onClick={deleteActiveProject}
+            disabled={!activeProject}
+          >
+            Delete project
+          </button>
+        </div>
+      </section>
+
+      {activeProject ? (
       <section className="workspace" aria-label="Hillchart editor">
         <form className="editor" aria-label="Milestone inputs">
           <label className="title-editor">
-            <span>Chart title</span>
+            <span>Project title</span>
             <input
               type="text"
               value={title}
               maxLength={96}
               placeholder={defaultChartTitle}
-              onChange={(event) => setTitle(event.target.value)}
-              onBlur={() => setTitle((current) => sanitizeTitle(current))}
+              onChange={(event) => updateActiveProject({ title: event.target.value })}
+              onBlur={() => updateActiveProject({ title: sanitizeTitle(title) })}
             />
           </label>
 
@@ -391,6 +481,16 @@ function App() {
           />
         </section>
       </section>
+      ) : (
+        <section className="projects-empty-state" aria-label="No projects">
+          <p className="eyebrow">No projects</p>
+          <h2>Create a project to start a hillchart</h2>
+          <p>Your projects are saved automatically in this browser.</p>
+          <button className="project-create-button" type="button" onClick={createNewProject}>
+            Create project
+          </button>
+        </section>
+      )}
     </main>
   );
 }

@@ -5,6 +5,7 @@ import App from "./App";
 const itemsStorageKey = "hillchart.items.v1";
 const titleStorageKey = "hillchart.title.v1";
 const dotShapeStorageKey = "hillchart.dotShape.v1";
+const projectsStorageKey = "hillchart.projects.v1";
 
 const pointerCaptures = new WeakMap<Element, Set<number>>();
 const storage = createStorageMock();
@@ -78,7 +79,7 @@ describe("App", () => {
     expect(star).not.toBeNull();
     expect(star?.querySelectorAll("polygon")).toHaveLength(2);
     expect(window.hillchart.getDotShape()).toBe("star");
-    expect(window.localStorage.getItem(dotShapeStorageKey)).toBe("star");
+    expect(readStoredProjects().projects[0].dotShape).toBe("star");
   });
 
   it("restores the persisted star shape on reopen", () => {
@@ -105,7 +106,7 @@ describe("App", () => {
     expect(marker?.querySelector("image")?.getAttribute("href")).toMatch(
       /^data:image\/svg\+xml;charset=utf-8,/,
     );
-    expect(window.localStorage.getItem(dotShapeStorageKey)).toBe("rebel-loon");
+    expect(readStoredProjects().projects[0].dotShape).toBe("rebel-loon");
   });
 
   it("rejects unknown console dot shapes without changing the current shape", () => {
@@ -327,11 +328,118 @@ describe("App", () => {
         .hasAttribute("disabled"),
     ).toBe(true);
   });
+
+  it("creates, renames, switches, and restores independent projects", () => {
+    seedChartState([{ id: "m1", name: "First milestone", percentage: 20 }]);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("Project title"), {
+      target: { value: "First project" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+
+    expect(screen.getByLabelText("Project")).toHaveProperty("selectedIndex", 1);
+    fireEvent.change(screen.getByLabelText("Project title"), {
+      target: { value: "Second project" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Milestone name"), {
+      target: { value: "Second milestone" },
+    });
+
+    const selector = screen.getByLabelText("Project");
+    const [firstProject] = readStoredProjects().projects;
+    fireEvent.change(selector, { target: { value: firstProject.id } });
+
+    expect(screen.getByLabelText("Project title")).toHaveProperty("value", "First project");
+    expect(screen.getByDisplayValue("First milestone")).not.toBeNull();
+    expect(screen.queryByDisplayValue("Second milestone")).toBeNull();
+    expect(readStoredProjects().projects.map((project: { title: string }) => project.title)).toEqual([
+      "First project",
+      "Second project",
+    ]);
+  });
+
+  it("allows projects to have duplicate titles", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "New project" }));
+
+    expect(screen.getAllByRole("option", { name: "Project Hillchart" })).toHaveLength(2);
+  });
+
+  it("cancels project deletion when confirmation is rejected", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+
+    expect(screen.getByLabelText("Project")).not.toHaveProperty("disabled", true);
+    expect(readStoredProjects().projects).toHaveLength(1);
+  });
+
+  it("selects the next project after deleting the active project", () => {
+    seedProjectStore({
+      version: 1,
+      activeProjectId: "first",
+      projects: [
+        {
+          id: "first",
+          title: "First",
+          items: [{ id: "m1", name: "", percentage: 20 }],
+          dotShape: "dot",
+        },
+        {
+          id: "second",
+          title: "Second",
+          items: [{ id: "m2", name: "Second milestone", percentage: 20 }],
+          dotShape: "star",
+        },
+      ],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { container } = render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+
+    expect(screen.getByLabelText("Project title")).toHaveProperty("value", "Second");
+    expect(container.querySelector('[data-marker-shape="star"]')).not.toBeNull();
+    expect(readStoredProjects()).toMatchObject({
+      activeProjectId: "second",
+      projects: [{ id: "second" }],
+    });
+  });
+
+  it("preserves an empty project list and creates from its empty state", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { unmount } = render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+
+    expect(screen.getByRole("heading", { name: "Create a project to start a hillchart" })).not.toBeNull();
+    expect(readStoredProjects()).toMatchObject({ activeProjectId: null, projects: [] });
+
+    unmount();
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "Create a project to start a hillchart" })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    expect(screen.getByLabelText("Project title")).toHaveProperty(
+      "value",
+      "Project Hillchart",
+    );
+  });
 });
 
 function seedChartState(items: unknown[]) {
   window.localStorage.setItem(itemsStorageKey, JSON.stringify(items));
   window.localStorage.setItem(titleStorageKey, "Project Hillchart");
+}
+
+function seedProjectStore(store: unknown) {
+  window.localStorage.setItem(projectsStorageKey, JSON.stringify(store));
+}
+
+function readStoredProjects() {
+  return JSON.parse(window.localStorage.getItem(projectsStorageKey)!);
 }
 
 function mockSvgBounds(svg: SVGSVGElement) {
