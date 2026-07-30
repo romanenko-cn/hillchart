@@ -1,0 +1,10 @@
+{
+  "title": "Rebel Loon Squadron",
+  "dotShape": "rebel-loon",
+  "items": [
+    { "name": "Nest reconnaissance", "percentage": 22 },
+    { "name": "Wing calibration", "percentage": 49 },
+    { "name": "Lake landing drills", "percentage": 71 },
+    { "name": "Victory honk", "percentage": 93 }
+  ]
+}

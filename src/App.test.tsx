@@ -104,7 +104,7 @@ describe("App", () => {
     const marker = container.querySelector('[data-marker-shape="rebel-loon"]');
     expect(marker).not.toBeNull();
     expect(marker?.querySelector("image")?.getAttribute("href")).toMatch(
-      /^data:image\/svg\+xml;charset=utf-8,/,
+      /^data:image\/svg\+xml;base64,/,
     );
     expect(readStoredProjects().projects[0].dotShape).toBe("rebel-loon");
   });
