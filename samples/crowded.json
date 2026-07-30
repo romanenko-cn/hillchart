@@ -1,0 +1,17 @@
+{
+  "title": "Everything All At Once",
+  "dotShape": "star",
+  "items": [
+    { "name": "Discovery interviews", "percentage": 8 },
+    { "name": "Pricing experiments", "percentage": 15 },
+    { "name": "Data model rework", "percentage": 24 },
+    { "name": "Search relevance", "percentage": 33 },
+    { "name": "Onboarding flow", "percentage": 41 },
+    { "name": "Permissions v2", "percentage": 50 },
+    { "name": "Webhooks", "percentage": 58 },
+    { "name": "CSV importer", "percentage": 67 },
+    { "name": "Rate limiting", "percentage": 76 },
+    { "name": "Status page", "percentage": 88 },
+    { "name": "SOC 2 evidence", "percentage": 97 }
+  ]
+}

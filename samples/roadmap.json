@@ -1,0 +1,11 @@
+{
+  "title": "Q3 Platform Roadmap",
+  "dotShape": "dot",
+  "items": [
+    { "name": "SSO integration", "percentage": 18 },
+    { "name": "Billing migration", "percentage": 42 },
+    { "name": "Audit log API", "percentage": 55 },
+    { "name": "Mobile push", "percentage": 78 },
+    { "name": "Dark mode", "percentage": 96 }
+  ]
+}
