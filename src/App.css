@@ -3,6 +3,25 @@
   padding: 28px;
 }
 
+.build-info {
+  max-width: 1280px;
+  margin: 22px auto 0;
+  color: #748096;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.build-info a {
+  color: #2f817d;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.build-info a:hover {
+  color: #1e6562;
+}
+
 .hero {
   display: flex;
   align-items: flex-end;

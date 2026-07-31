@@ -468,6 +468,17 @@ function App() {
           </button>
         </section>
       )}
+
+      <footer className="build-info">
+        Built{" "}
+        <time dateTime={__BUILD_TIME__}>
+          {__BUILD_TIME__.replace("T", " ").replace(/\.\d{3}Z$/, " UTC")}
+        </time>
+        {" from "}
+        <a href={__GIT_COMMIT_URL__} target="_blank" rel="noreferrer">
+          {__GIT_SHA__.slice(0, 7)}
+        </a>
+      </footer>
     </main>
   );
 }

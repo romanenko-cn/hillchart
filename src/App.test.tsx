@@ -55,6 +55,16 @@ afterEach(() => {
 });
 
 describe("App", () => {
+  it("shows when and from which commit the app was built", () => {
+    render(<App />);
+
+    const commitLink = screen.getByRole("link", { name: __GIT_SHA__.slice(0, 7) });
+    expect(commitLink.getAttribute("href")).toBe(__GIT_COMMIT_URL__);
+    expect(
+      screen.getByText(__BUILD_TIME__.replace("T", " ").replace(/\.\d{3}Z$/, " UTC")),
+    ).not.toBeNull();
+  });
+
   it("uses dot markers by default and exposes the available console settings", () => {
     seedChartState([{ id: "m1", name: "Milestone A", percentage: 20 }]);
 
