@@ -2,6 +2,7 @@ export type HillchartItem = {
   id: string;
   name: string;
   percentage: number;
+  color?: string;
   manualLabelPosition?: ChartPoint;
 };
 
@@ -18,6 +19,7 @@ export type HillchartLabelLayout = {
   leaderEndX: number;
   leaderStartY: number;
   leaderEndY: number;
+  leaderPath: string;
   textAnchor: "start" | "middle" | "end";
   box: LabelBox;
 };
@@ -111,6 +113,7 @@ export function buildHillPath(steps = 180): string {
 
 export function buildLabelLayouts(items: HillchartItem[]): HillchartLabelLayout[] {
   const placed: HillchartLabelLayout[] = [];
+  const dotPoints = items.map((item) => getHillPoint(item.percentage));
 
   items
     .map((item, index) => ({ item, index, point: getHillPoint(item.percentage) }))
@@ -121,18 +124,21 @@ export function buildLabelLayouts(items: HillchartItem[]): HillchartLabelLayout[
         : createLabelCandidates(item, point, index)
             .map((candidate) => ({
               candidate,
-              score: scoreCandidate(candidate.box, placed, candidate.distancePenalty),
+              score: scoreCandidate(candidate, placed, dotPoints),
             }))
             .sort((first, second) => first.score - second.score)[0].candidate;
+
+      const leader = leaderGeometry(point, item, best.labelX, best.labelY, best.above);
 
       placed.push({
         item,
         point,
         labelX: best.labelX,
         labelY: best.labelY,
-        leaderEndX: best.labelX,
-        leaderStartY: point.y + (best.above ? -18 : 18),
-        leaderEndY: best.labelY + (best.above ? 20 : -20),
+        leaderEndX: leader.endX,
+        leaderStartY: leader.startY,
+        leaderEndY: leader.endY,
+        leaderPath: leader.path,
         textAnchor: best.textAnchor,
         box: best.box,
       });
@@ -167,7 +173,7 @@ function createLabelCandidates(item: HillchartItem, point: ChartPoint, index: nu
       (first, second) => Math.abs(first - preferredY) - Math.abs(second - preferredY),
     ),
   ];
-  const xOffsets = [0, -180, 180, -320, 320];
+  const xOffsets = [0, -180, 180, -320, 320, -470, 470, -640, 640, -820, 820];
 
   return yCandidates.flatMap((labelY, laneIndex) =>
     xOffsets.map((xOffset, xIndex) => {
@@ -188,9 +194,98 @@ function createLabelCandidates(item: HillchartItem, point: ChartPoint, index: nu
         textAnchor: "middle" as const,
         distancePenalty: lanePenalty + horizontalPenalty + verticalPenalty,
         box: createLabelBox(centerX, labelY, width),
+        segments: leaderSegments(point, item, centerX, labelY, above),
       };
     }),
   );
+}
+
+type LeaderSegments = {
+  vertical: { x: number; top: number; bottom: number };
+  horizontal: { y: number; left: number; right: number };
+};
+
+function leaderGeometry(
+  point: ChartPoint,
+  item: HillchartItem,
+  labelX: number,
+  labelY: number,
+  above: boolean,
+): { startY: number; endY: number; endX: number; corridorY: number; path: string } {
+  const textHalfWidth = (item.name.trim().length * 11.5) / 2 + 10;
+  const startY = point.y + (above ? -18 : 18);
+  const corridorY = labelY + (above ? 20 : -20);
+  const sideApproach = point.x < labelX - textHalfWidth || point.x > labelX + textHalfWidth;
+
+  if (sideApproach) {
+    const endY = labelY - 7;
+    const endX = point.x < labelX ? labelX - textHalfWidth : labelX + textHalfWidth;
+    const hookX = endX + (point.x < labelX ? -14 : 14);
+
+    return {
+      startY,
+      endY,
+      endX,
+      corridorY,
+      path: `M ${point.x} ${startY} V ${corridorY} H ${hookX} V ${endY} H ${endX}`,
+    };
+  }
+
+  return {
+    startY,
+    endY: corridorY,
+    endX: labelX,
+    corridorY,
+    path: `M ${point.x} ${startY} V ${corridorY} H ${labelX}`,
+  };
+}
+
+function leaderSegments(
+  point: ChartPoint,
+  item: HillchartItem,
+  labelX: number,
+  labelY: number,
+  above: boolean,
+): LeaderSegments {
+  const leader = leaderGeometry(point, item, labelX, labelY, above);
+
+  return {
+    vertical: {
+      x: point.x,
+      top: Math.min(leader.startY, leader.corridorY),
+      bottom: Math.max(leader.startY, leader.corridorY),
+    },
+    horizontal: {
+      y: leader.corridorY,
+      left: Math.min(point.x, leader.endX),
+      right: Math.max(point.x, leader.endX),
+    },
+  };
+}
+
+function layoutLeaderSegments(layout: HillchartLabelLayout): LeaderSegments {
+  return leaderSegments(
+    layout.point,
+    layout.item,
+    layout.labelX,
+    layout.labelY,
+    layout.leaderStartY < layout.point.y,
+  );
+}
+
+function segmentsCrossBox(segments: LeaderSegments, box: LabelBox): boolean {
+  const vertical =
+    segments.vertical.x > box.left &&
+    segments.vertical.x < box.right &&
+    segments.vertical.top < box.bottom &&
+    segments.vertical.bottom > box.top;
+  const horizontal =
+    segments.horizontal.y > box.top &&
+    segments.horizontal.y < box.bottom &&
+    segments.horizontal.left < box.right &&
+    segments.horizontal.right > box.left;
+
+  return vertical || horizontal;
 }
 
 function createManualLabelCandidate(item: HillchartItem, point: ChartPoint) {
@@ -216,20 +311,46 @@ function createLabelBox(centerX: number, labelY: number, width: number): LabelBo
   };
 }
 
+const dotClearance = 20;
+
 function scoreCandidate(
-  box: LabelBox,
+  candidate: { box: LabelBox; segments: LeaderSegments; distancePenalty: number },
   placed: HillchartLabelLayout[],
-  distancePenalty: number,
+  dotPoints: ChartPoint[],
 ): number {
-  return placed.reduce((score, layout) => {
-    if (!boxesOverlap(box, layout.box)) {
-      return score;
+  const dotPenalty = dotPoints.reduce((score, dot) => {
+    const coversDot =
+      dot.x > candidate.box.left - dotClearance &&
+      dot.x < candidate.box.right + dotClearance &&
+      dot.y > candidate.box.top - dotClearance &&
+      dot.y < candidate.box.bottom + dotClearance;
+
+    return coversDot ? score + 12_000 : score;
+  }, 0);
+
+  return dotPenalty + placed.reduce((score, layout) => {
+    let next = score;
+
+    if (boxesOverlap(candidate.box, layout.box)) {
+      const overlapX =
+        Math.min(candidate.box.right, layout.box.right) -
+        Math.max(candidate.box.left, layout.box.left);
+      const overlapY =
+        Math.min(candidate.box.bottom, layout.box.bottom) -
+        Math.max(candidate.box.top, layout.box.top);
+      next += 40_000 + overlapX * overlapY;
     }
 
-    const overlapX = Math.min(box.right, layout.box.right) - Math.max(box.left, layout.box.left);
-    const overlapY = Math.min(box.bottom, layout.box.bottom) - Math.max(box.top, layout.box.top);
-    return score + 10_000 + overlapX * overlapY;
-  }, distancePenalty);
+    if (segmentsCrossBox(candidate.segments, layout.box)) {
+      next += 9_000;
+    }
+
+    if (segmentsCrossBox(layoutLeaderSegments(layout), candidate.box)) {
+      next += 9_000;
+    }
+
+    return next;
+  }, candidate.distancePenalty);
 }
 
 function boxesOverlap(first: LabelBox, second: LabelBox): boolean {
@@ -245,7 +366,7 @@ function boxesOverlap(first: LabelBox, second: LabelBox): boolean {
 function estimateLabelWidth(item: HillchartItem): number {
   const titleWidth = item.name.trim().length * 11.5;
 
-  return clamp(titleWidth + 26, 128, 300);
+  return clamp(titleWidth + 26, 128, 486);
 }
 
 export function clampManualLabelPosition(
@@ -297,8 +418,13 @@ function sanitizeItem(value: unknown, index: number): HillchartItem {
         : createMilestoneId(),
     name: typeof candidate.name === "string" ? candidate.name : "",
     percentage: clampPercentage(Number(candidate.percentage)),
+    color: sanitizeColor(candidate.color),
     manualLabelPosition: sanitizeManualLabelPosition(candidate.manualLabelPosition),
   };
+}
+
+function sanitizeColor(value: unknown): string | undefined {
+  return typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : undefined;
 }
 
 function sanitizeManualLabelPosition(value: unknown): ChartPoint | undefined {
