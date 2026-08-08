@@ -99,7 +99,8 @@ describe("buildLabelLayouts", () => {
 
     expect(layout.labelX).toBe(420);
     expect(layout.labelY).toBe(180);
-    expect(layout.leaderEndX).toBe(420);
+    expect(layout.leaderEndX).toBe(341);
+    expect(layout.leaderEndY).toBe(173);
     expect(layout.box.left).toBeLessThan(layout.box.right);
   });
 
