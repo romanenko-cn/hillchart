@@ -165,7 +165,7 @@ describe("App", () => {
     expect(label.getAttribute("y")).toBe("240");
 
     const leaderLine = container.querySelector('path[stroke-width="3"]');
-    expect(leaderLine?.getAttribute("d")).toContain("H 610");
+    expect(leaderLine?.getAttribute("d")).toContain("V 233 H 536.75");
   });
 
   it("drags milestone dots along the hill and updates the percentage input", () => {

@@ -281,12 +281,12 @@ export function HillChart({
 
       {labelLayouts.map((layout) => {
         const { item, point } = layout;
-        const color = markerColor(item.percentage);
+        const color = item.color ?? markerColor(item.percentage);
 
         return (
           <g key={item.id}>
             <path
-              d={`M ${point.x} ${layout.leaderStartY} V ${layout.leaderEndY} H ${layout.leaderEndX}`}
+              d={layout.leaderPath}
               stroke={color}
               strokeWidth="3"
               fill="none"
